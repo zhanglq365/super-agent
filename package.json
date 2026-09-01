@@ -14,18 +14,18 @@
   "devEngines": {
     "packageManager": {
       "name": "pnpm",
-      "version": "^11.0.9",
+      "version": "^11.25.0",
       "onFail": "download"
     }
   },
   "dependencies": {
-    "@ai-sdk/openai": "^3.0.63",
-    "ai": "^6.0.177",
+    "@ai-sdk/openai": "^4.0.52",
+    "ai": "^7.0.85",
     "dotenv": "^17.4.2"
   },
   "devDependencies": {
-    "@types/node": "^25.6.2",
-    "tsx": "^4.21.0",
-    "typescript": "^6.0.3"
+    "@types/node": "^26.4.0",
+    "tsx": "^4.23.13",
+    "typescript": "^7.0.2"
   }
 }

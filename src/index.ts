@@ -45,7 +45,7 @@ function ask() {
       content: trimmed,
     })
 
-    await agentLoop(model, tools, messages, SYSTEM)
+    await agentLoop(model, tools, messages, SYSTEM, budget)
 
     // 递归调用 ask 函数，继续等待用户输入
     ask()

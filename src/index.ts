@@ -3,7 +3,7 @@ import { stepCountIs, streamText, type ModelMessage } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai';
 import { createInterface } from 'node:readline'; // 用于读取用户输入
 import { weatherTool, calculatorTool } from './tools/utility-tools';
-import { agentLoop, type BudgetState } from './agent/loop';
+import { agentLoop, type BudgetState } from './agent-loop';
 import { createMockModel } from './mock-model';
 
 // 显示加载 .env.local
@@ -45,7 +45,7 @@ function ask() {
       content: trimmed,
     })
 
-    await agentLoop(model, tools, messages, SYSTEM, budget)
+    await agentLoop(model, tools, messages, SYSTEM)
 
     // 递归调用 ask 函数，继续等待用户输入
     ask()

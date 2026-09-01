@@ -1,10 +1,17 @@
 import { streamText, type ModelMessage } from 'ai'
+import { detect, recordCall, recordResult, resetHistory } from '../loop-detection';
 
-const MAX_STEPS = 10
+export interface BudgetState {
+  used: number;
+  limit: number;
+}
 
-export async function agentLoop(model: any, tools: any, messages: ModelMessage[], system: string) {
+const MAX_STEPS = 15;
+
+export async function agentLoop(model: any, tools: any, messages: ModelMessage[], system: string, budget: BudgetState) {
   // 实现 Agent 循环调用
   let step = 0;
+  resetHistory();
 
   while (step < MAX_STEPS) {
     step++
@@ -14,11 +21,14 @@ export async function agentLoop(model: any, tools: any, messages: ModelMessage[]
       model,
       system,
       messages,
-      tools
+      tools,
+      maxRetries: 0
     })
 
     let hasToolCall = false;
     let fullText = '';
+    let shouldBreak = false;
+    let lastToolCall: { name: string; input: unknown } | null = null;
 
     for await (const part of result.fullStream) {
       switch (part.type) {
@@ -28,12 +38,36 @@ export async function agentLoop(model: any, tools: any, messages: ModelMessage[]
           break;
         case 'tool-call':
           hasToolCall = true;
+          lastToolCall = { name: part.toolName, input: part.input };
+
           console.log(`\n [调用：${part.toolName}(${JSON.stringify(part.input)})]`);
+
+          const detection = detect(part.toolName, part.input);
+          if (detection.stuck) {
+            console.log(`  ${detection.message}`);
+            if (detection.level === 'critical') {
+              shouldBreak = true;
+            } else {
+              messages.push({
+                role: 'user' as const,
+                content: `[系统提醒] ${detection.message}。请换一个思路解决问题，不要重复同样的操作。`,
+              });
+            }
+          }
+          recordCall(part.toolName, part.input);
           break;
         case 'tool-result':
           console.log(`\n [结果：${JSON.stringify(part.output)}]`);
+          if (lastToolCall) {
+            recordResult(lastToolCall.name, lastToolCall.input, part.output);
+          }
           break;
       }
+    }
+
+    if (shouldBreak) {
+      console.log('\n[循环检测触发，Agent 已停止]');
+      break;
     }
 
     // 拿到当前步完整结果，追加到消息历史

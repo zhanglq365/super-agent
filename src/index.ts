@@ -2,7 +2,8 @@ import dotenv from 'dotenv';
 import { stepCountIs, streamText, type ModelMessage } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai';
 import { createInterface } from 'node:readline'; // 用于读取用户输入
-import { weatherTool, calculatorTool } from './tools/utility-tools';
+import { ToolRegistry } from './tool-registry';
+import { allTools } from './tools';
 import { agentLoop, type BudgetState } from './agent-loop';
 import { createMockModel } from './mock-model';
 
@@ -15,7 +16,18 @@ const client = createOpenAI({
 })
 const model = process.env.DASHSCOPE_MODEL ? client.chat(process.env.DASHSCOPE_MODEL as string) : createMockModel();
 
-const tools = { 'get_weather': weatherTool, 'calculator': calculatorTool }
+const registry = new ToolRegistry();
+registry.register(...allTools);
+
+console.log(`已注册 ${registry.getAll().length} 个工具：`);
+for (const tool of registry.getAll()) {
+  const flags = [
+    tool.isConcurrencySafe ? '可并发' : '串行',
+    tool.isReadOnly ? '只读' : '读写',
+  ].join(', ');
+  console.log(`  - ${tool.name}（${flags}）`);
+}
+
 const messages: ModelMessage[] = [];
 
 // 预算由调用方持有，跨轮持续累计——agentLoop 只负责消费它
@@ -45,7 +57,7 @@ function ask() {
       content: trimmed,
     })
 
-    await agentLoop(model, tools, messages, SYSTEM, budget)
+    await agentLoop(model, registry, messages, SYSTEM, budget)
 
     // 递归调用 ask 函数，继续等待用户输入
     ask()

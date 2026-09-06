@@ -21,7 +21,8 @@
   "dependencies": {
     "@ai-sdk/openai": "^4.0.52",
     "ai": "^7.0.85",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "fast-glob": "^3.3.3"
   },
   "devDependencies": {
     "@types/node": "^26.4.0",

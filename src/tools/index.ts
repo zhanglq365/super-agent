@@ -405,6 +405,8 @@ export const startPreviewTool: ToolDefinition = {
   },
 };
 
+import { pickSearchTool, webFetchTool } from './search-tool';
+
 export const allTools: ToolDefinition[] = [
   weatherTool,
   calculatorTool,
@@ -417,4 +419,6 @@ export const allTools: ToolDefinition[] = [
   bashTool,
   fetchUrlTool,
   startPreviewTool,
+  pickSearchTool(),
+  webFetchTool,
 ];

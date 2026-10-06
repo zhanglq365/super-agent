@@ -1,24 +1,20 @@
 import { streamText, type ModelMessage } from 'ai';
+import { ToolRegistry } from './tool-registry.js';
 import { detect, recordCall, recordResult, resetHistory } from './loop-detection.js';
 import { isRetryable, calculateDelay, sleep } from './retry.js';
-import type { ToolRegistry } from './tool-registry.js';
 
 const MAX_STEPS = 15;
 const MAX_RETRIES = 3;
-
-export interface BudgetState {
-  used: number;
-  limit: number;
-}
+const TOKEN_BUDGET = 50000;
 
 export async function agentLoop(
   model: any,
   registry: ToolRegistry,
   messages: ModelMessage[],
   system: string,
-  budget: BudgetState,
 ) {
   let step = 0;
+  let totalTokens = 0;
   resetHistory();
 
   while (step < MAX_STEPS) {
@@ -29,10 +25,9 @@ export async function agentLoop(
     let fullText = '';
     let shouldBreak = false;
     let lastToolCall: { name: string; input: unknown } | null = null;
-    let stepResponse: Awaited<ReturnType<typeof streamText>['response']>;
-    let stepUsage: Awaited<ReturnType<typeof streamText>['usage']>;
+    let stepResponse: any;
+    let stepUsage: any;
 
-    // 步骤级重试：包裹整个 stream 消费过程
     for (let attempt = 1; ; attempt++) {
       try {
         const result = streamText({
@@ -41,7 +36,8 @@ export async function agentLoop(
           tools: registry.toAISDKFormat(),
           messages,
           maxRetries: 0,
-          onError: () => { }
+          providerOptions: { openai: { parallelToolCalls: true } },
+          onError: () => { },
         });
 
         for await (const part of result.fullStream) {
@@ -72,12 +68,15 @@ export async function agentLoop(
               break;
             }
 
-            case 'tool-result':
-              console.log(`  [结果: ${JSON.stringify(part.output)}]`);
+            case 'tool-result': {
+              const output = typeof part.output === 'string' ? part.output : JSON.stringify(part.output);
+              const preview = output.length > 120 ? output.slice(0, 120) + '...' : output;
+              console.log(`  [结果: ${part.toolName}] ${preview}`);
               if (lastToolCall) {
                 recordResult(lastToolCall.name, lastToolCall.input, part.output);
               }
               break;
+            }
           }
         }
 
@@ -87,7 +86,7 @@ export async function agentLoop(
       } catch (error) {
         if (attempt > MAX_RETRIES || !isRetryable(error as Error)) throw error;
         const delay = calculateDelay(attempt);
-        console.log(`  [重试] 第 ${attempt}/${MAX_RETRIES} 次失败，${delay}ms 后重试...`);
+        console.log(`  [重试] 第 ${attempt}/${MAX_RETRIES} 次，${delay}ms 后...`);
         await sleep(delay);
         hasToolCall = false;
         fullText = '';
@@ -103,14 +102,14 @@ export async function agentLoop(
 
     messages.push(...stepResponse!.messages);
 
-    // Token 预算追踪：budget 由调用方持有，跨轮持续累计
-    const inp = typeof stepUsage?.inputTokens === 'number' ? stepUsage.inputTokens : ((stepUsage?.inputTokens as any)?.total ?? 0);
-    const out = typeof stepUsage?.outputTokens === 'number' ? stepUsage.outputTokens : ((stepUsage?.outputTokens as any)?.total ?? 0);
-    budget.used += inp + out;
-    const pct = Math.round(budget.used / budget.limit * 100);
-    console.log(`  [Token] ${budget.used}/${budget.limit} (${pct}%)`);
-    if (budget.used > budget.limit) {
-      console.log('\n[Token 预算耗尽，强制停止]');
+    const inp = stepUsage?.inputTokens?.total ?? stepUsage?.inputTokens ?? 0;
+    const out = stepUsage?.outputTokens?.total ?? stepUsage?.outputTokens ?? 0;
+    totalTokens += inp + out;
+    if (totalTokens > TOKEN_BUDGET * 0.9) {
+      console.log(`  [Token] ${totalTokens}/${TOKEN_BUDGET} (${Math.round(totalTokens / TOKEN_BUDGET * 100)}%)`);
+    }
+    if (totalTokens > TOKEN_BUDGET) {
+      console.log('\n[Token 预算耗尽]');
       break;
     }
 
@@ -123,6 +122,6 @@ export async function agentLoop(
   }
 
   if (step >= MAX_STEPS) {
-    console.log('\n[达到最大步数限制，强制停止]');
+    console.log('\n[达到最大步数]');
   }
 }

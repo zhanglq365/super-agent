@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from '
 import { extname, join, relative, resolve } from 'node:path';
 import { execSync } from 'node:child_process';
 import fg from 'fast-glob';
-import type { ToolDefinition } from '../tool-registry';
+import type { ToolDefinition } from './registry';
 import { createServer, type Server } from 'node:http';
 
 export const weatherTool: ToolDefinition = {

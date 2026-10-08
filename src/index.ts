@@ -2,11 +2,11 @@ import dotenv from 'dotenv';
 import { stepCountIs, streamText, type ModelMessage } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai';
 import { createInterface } from 'node:readline'; // 用于读取用户输入
-import { ToolRegistry, type ToolDefinition } from './tool-registry';
+import { ToolRegistry, type ToolDefinition } from './tools/registry';
 import { allTools } from './tools';
-import { agentLoop } from './agent-loop';
+import { agentLoop } from './agent/loop';
 import { createMockModel } from './mock-model';
-import { MCPClient, MockMCPClient } from './mcp-client.js';
+import { MCPClient, MockMCPClient } from './tools/mcp-client.js';
 
 // 显示加载 .env.local
 dotenv.config({ path: ['.env.local', '.env'] });

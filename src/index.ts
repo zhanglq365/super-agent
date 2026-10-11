@@ -7,6 +7,7 @@ import { allTools } from './tools';
 import { agentLoop } from './agent/loop';
 import { createMockModel } from './mock-model';
 import { MCPClient, MockMCPClient } from './tools/mcp-client.js';
+import { SessionStore } from './session/store';
 
 // 显示加载 .env.local
 dotenv.config({ path: ['.env.local', '.env'] });
@@ -45,6 +46,8 @@ const toolSearchTool: ToolDefinition = {
 };
 
 registry.register(toolSearchTool);
+
+
 
 
 // 模拟额外的 MCP 工具（演示工具膨胀问题）
@@ -114,6 +117,18 @@ async function main() {
   const simCount = registerSimulatedTools();
   console.log(`  已注册 ${simCount} 个模拟 MCP 工具（Notion/Browser/Supabase）`);
 
+  // Session 持久化
+  const isContinue = process.argv.includes('--continue');
+  const store = new SessionStore('default');
+
+  let messages: ModelMessage[] = [];
+  if (isContinue && store.exists()) {
+    messages = store.load();
+    console.log(`[Session] 恢复会话，${messages.length} 条历史消息`);
+  } else {
+    console.log(`[Session] 新会话`);
+  }
+
   const allCount = registry.getAll().length;
   const activeTools = registry.getActiveTools();
   const estimate = registry.countTokenEstimate();
@@ -126,7 +141,7 @@ async function main() {
 
   const deferredSummary = registry.getDeferredToolSummary();
 
-  const messages: ModelMessage[] = [];
+  // const messages: ModelMessage[] = [];
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
   const SYSTEM = `你是 Super Agent，一个有工具调用能力的 AI 助手。
@@ -144,14 +159,23 @@ async function main() {
         return;
       }
 
-      messages.push({ role: 'user', content: trimmed });
+      const userMsg: ModelMessage = { role: 'user', content: trimmed };
+      messages.push(userMsg);
+      store.append(userMsg);
+
+      const beforeLen = messages.length;
       await agentLoop(model, registry, messages, SYSTEM);
+
+      // 持久化本轮新增的消息（agent loop 会往 messages 里 push assistant/tool 消息）
+      const newMessages = messages.slice(beforeLen);
+      store.appendAll(newMessages);
+
       ask();
     });
   }
 
-  console.log('\nSuper Agent v0.6 — Dynamic Tools (type "exit" to quit)');
-  console.log('试试："查看 vercel/ai 的 issues"（会触发 tool_search）\n');
+  console.log('Super Agent v0.7 — Session + Prompt Pipe (type "exit" to quit)');
+  console.log('对话会自动保存。用 pnpm run continue 恢复上次对话。\n');
   ask();
 }
 

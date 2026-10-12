@@ -1,5 +1,5 @@
 import { jsonSchema } from 'ai';
-import type { MCPClient, MockMCPClient } from './mcp-client';
+import type { IMCPClient } from './mcp-client';
 
 export interface ToolDefinition {
   name: string;
@@ -25,7 +25,7 @@ export class ToolRegistry {
   private exclusiveLock = false;          // 当前是否有独占锁持有者
   private concurrentCount = 0;            // 当前共享锁持有数
   private waitQueue: Array<() => void> = [];  // 阻塞等待中的 resolve 函数
-  private mcpClients: Array<MCPClient | MockMCPClient> = [];
+  private mcpClients: Array<IMCPClient> = [];
 
   private discoveredTools = new Set<string>();
 
@@ -116,7 +116,7 @@ export class ToolRegistry {
 
   async registerMCPServer(
     serverName: string,
-    client: MCPClient | MockMCPClient,
+    client: IMCPClient,
   ): Promise<string[]> {
     await client.connect();
     this.mcpClients.push(client);

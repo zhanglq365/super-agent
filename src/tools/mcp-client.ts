@@ -1,18 +1,185 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { createInterface, type Interface } from 'node:readline';
 
-interface MCPTool {
+export interface MCPTool {
   name: string;
   description: string;
   inputSchema: Record<string, unknown>;
 }
 
-interface MCPCallResult {
+export interface MCPCallResult {
   content: Array<{ type: string; text?: string }>;
   isError?: boolean;
 }
 
-export class MCPClient {
+export interface IMCPClient {
+  connect(): Promise<void>;
+  listTools(): Promise<MCPTool[]>;
+  callTool(name: string, args: Record<string, unknown>): Promise<string>;
+  close(): Promise<void>;
+}
+
+export interface RemoteMCPClientOptions {
+  url: string;
+  headers?: Record<string, string>;
+  timeoutMs?: number;
+}
+
+/**
+ * 远程 MCP 客户端 (Streamable HTTP / SSE)
+ * 适用于 GitHub 官方托管 MCP Server (如 https://api.githubcopilot.com/mcp/)
+ */
+export class RemoteMCPClient implements IMCPClient {
+  private url: string;
+  private headers: Record<string, string>;
+  private timeoutMs: number;
+  private sessionId: string | null = null;
+  private requestId = 0;
+
+  constructor(options: RemoteMCPClientOptions) {
+    this.url = options.url;
+    this.headers = options.headers || {};
+    this.timeoutMs = options.timeoutMs ?? 30000;
+  }
+
+  private getRequestHeaders(): Record<string, string> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json, text/event-stream',
+      ...this.headers,
+    };
+    if (this.sessionId) {
+      headers['Mcp-Session-Id'] = this.sessionId;
+    }
+    return headers;
+  }
+
+  private parseResponseBody(text: string): any {
+    // 1. 尝试直接作为 JSON 解析
+    try {
+      return JSON.parse(text);
+    } catch {
+      // 2. 如果包含 SSE 格式 (event: ... \n data: ...)
+      const lines = text.split('\n');
+      for (const line of lines) {
+        if (line.startsWith('data:')) {
+          const jsonStr = line.slice(5).trim();
+          if (jsonStr) {
+            try {
+              const parsed = JSON.parse(jsonStr);
+              if (parsed.result !== undefined || parsed.error !== undefined) {
+                return parsed;
+              }
+            } catch {
+              // 忽略不合法的 JSON 行
+            }
+          }
+        }
+      }
+      throw new Error(`无法解析 MCP 响应内容: ${text.slice(0, 200)}`);
+    }
+  }
+
+  private async request(method: string, params?: unknown, isNotification = false): Promise<any> {
+    const id = isNotification ? undefined : ++this.requestId;
+    const body: Record<string, unknown> = {
+      jsonrpc: '2.0',
+      method,
+    };
+    if (id !== undefined) body.id = id;
+    if (params !== undefined) body.params = params;
+
+    const res = await fetch(this.url, {
+      method: 'POST',
+      headers: this.getRequestHeaders(),
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+
+    const returnedSessionId = res.headers.get('mcp-session-id');
+    if (returnedSessionId) {
+      this.sessionId = returnedSessionId;
+    }
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => '');
+      throw new Error(`MCP HTTP 请求失败 (${res.status} ${res.statusText}): ${errText.slice(0, 200)}`);
+    }
+
+    if (isNotification) {
+      return null;
+    }
+
+    const text = await res.text();
+    const data = this.parseResponseBody(text);
+    if (data.error) {
+      throw new Error(`MCP error ${data.error.code}: ${data.error.message}`);
+    }
+    return data.result;
+  }
+
+  async connect(): Promise<void> {
+    await this.request('initialize', {
+      protocolVersion: '2024-11-05',
+      capabilities: {},
+      clientInfo: { name: 'super-agent', version: '1.0.0' },
+    });
+
+    await this.request('notifications/initialized', undefined, true).catch(() => {
+      // 部分远程服务不强制要求处理此通知，忽略异常
+    });
+  }
+
+  async listTools(): Promise<MCPTool[]> {
+    const result = await this.request('tools/list', {});
+    return (result?.tools || []).map((tool: any) => ({
+      name: tool.name,
+      description: tool.description || '',
+      inputSchema: tool.inputSchema || tool.parameters || { type: 'object', properties: {} },
+    }));
+  }
+
+  async callTool(name: string, args: Record<string, unknown>): Promise<string> {
+    const result: MCPCallResult = await this.request('tools/call', {
+      name,
+      arguments: args,
+    });
+
+    const texts = (result?.content || [])
+      .filter((c: any) => c.type === 'text' && c.text)
+      .map((c: any) => c.text);
+
+    if (texts.length > 0) {
+      return texts.join('\n');
+    }
+
+    if (result?.isError) {
+      return `(执行失败: ${JSON.stringify(result)})`;
+    }
+
+    return JSON.stringify(result ?? '(无返回内容)');
+  }
+
+  async close(): Promise<void> {
+    if (this.sessionId) {
+      try {
+        await fetch(this.url, {
+          method: 'DELETE',
+          headers: this.getRequestHeaders(),
+          signal: AbortSignal.timeout(5000),
+        });
+      } catch {
+        // 关闭 session 错误可忽略
+      }
+      this.sessionId = null;
+    }
+  }
+}
+
+/**
+ * 基于标准输入输出进程的本地 MCP 客户端 (stdio)
+ */
+export class StdioMCPClient implements IMCPClient {
   private process: ChildProcess | null = null;
   private rl: Interface | null = null;
   private requestId = 0;
@@ -100,7 +267,10 @@ export class MCPClient {
   }
 }
 
-export class MockMCPClient {
+// 保持别名以兼容原有导入
+export { StdioMCPClient as MCPClient };
+
+export class MockMCPClient implements IMCPClient {
   async connect(): Promise<void> { }
 
   async listTools(): Promise<MCPTool[]> {

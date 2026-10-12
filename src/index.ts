@@ -6,7 +6,7 @@ import { ToolRegistry, type ToolDefinition } from './tools/registry';
 import { allTools } from './tools';
 import { agentLoop } from './agent/loop';
 import { createMockModel } from './mock-model';
-import { MCPClient, MockMCPClient } from './tools/mcp-client.js';
+import { RemoteMCPClient, MockMCPClient } from './tools/mcp-client.js';
 import { SessionStore } from './session/store';
 import { coreRules, deferredTools, PromptBuilder, sessionContext, toolGuide, type PromptContext } from './context/prompt-builder';
 
@@ -77,33 +77,26 @@ function registerSimulatedTools() {
 }
 
 async function connectMCP() {
-  const githubToken = process.env.GITHUB_PERSONAL_ACCESS_TOKEN;
+  const githubToken = process.env.GITHUB_PERSONAL_ACCESS_TOKEN || process.env.GITHUB_TOKEN;
+  const mcpUrl = process.env.GITHUB_MCP_URL || 'https://api.githubcopilot.com/mcp/';
 
-  let canSpawn = true;
-  try {
-    const { execSync } = await import('node:child_process');
-    execSync('echo test', { stdio: 'ignore' });
-  } catch {
-    canSpawn = false;
-  }
-
-  if (githubToken && canSpawn) {
-    console.log('\n连接 GitHub MCP Server...');
+  if (githubToken) {
+    console.log(`\n连接远程 GitHub MCP Server (${mcpUrl})...`);
     try {
-      const client = new MCPClient(
-        'npx', ['-y', '@modelcontextprotocol/server-github'],
-        { GITHUB_PERSONAL_ACCESS_TOKEN: githubToken },
-      );
+      const client = new RemoteMCPClient({
+        url: mcpUrl,
+        headers: {
+          Authorization: `Bearer ${githubToken}`,
+        },
+      });
       const tools = await registry.registerMCPServer('github', client);
-      console.log(`  已注册 ${tools.length} 个 MCP 工具`);
+      console.log(`  已注册 ${tools.length} 个远程 GitHub MCP 工具`);
       return;
     } catch (err) {
-      console.log(`  MCP 连接失败: ${err instanceof Error ? err.message : err}`);
+      console.log(`  远程 MCP 连接失败: ${err instanceof Error ? err.message : err}`);
       console.log('  降级为 Mock MCP...');
     }
-  }
-
-  if (!githubToken) {
+  } else {
     console.log('\n未配置 GITHUB_PERSONAL_ACCESS_TOKEN，使用 Mock MCP');
   }
 

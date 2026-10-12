@@ -8,6 +8,7 @@ import { agentLoop } from './agent/loop';
 import { createMockModel } from './mock-model';
 import { MCPClient, MockMCPClient } from './tools/mcp-client.js';
 import { SessionStore } from './session/store';
+import { coreRules, deferredTools, PromptBuilder, sessionContext, toolGuide, type PromptContext } from './context/prompt-builder';
 
 // 显示加载 .env.local
 dotenv.config({ path: ['.env.local', '.env'] });
@@ -119,35 +120,41 @@ async function main() {
 
   // Session 持久化
   const isContinue = process.argv.includes('--continue');
-  const store = new SessionStore('default');
+  const sessionId = 'default';
+  const store = new SessionStore(sessionId);
 
   let messages: ModelMessage[] = [];
   if (isContinue && store.exists()) {
     messages = store.load();
-    console.log(`[Session] 恢复会话，${messages.length} 条历史消息`);
+    console.log(`\n[Session] 恢复会话 "${sessionId}"，${messages.length} 条历史消息`);
   } else {
-    console.log(`[Session] 新会话`);
+    console.log(`\n[Session] 新会话 "${sessionId}"`);
   }
 
-  const allCount = registry.getAll().length;
+  const builder = new PromptBuilder()
+    .pipe('coreRules', coreRules())
+    .pipe('toolGuide', toolGuide())
+    .pipe('deferredTools', deferredTools())
+    .pipe('sessionContext', sessionContext());
+
+  const promptCtx: PromptContext = {
+    toolCount: registry.getActiveTools().length,
+    deferredToolSummary: registry.getDeferredToolSummary(),
+    sessionMessageCount: messages.length,
+    sessionId,
+  };
+
+  const SYSTEM = builder.build(promptCtx);
+  builder.debug(promptCtx);  // 显示各模块状态
+
+  // Debug: 显示 Prompt Pipe 各模块状态
+  builder.debug(promptCtx);
+
   const activeTools = registry.getActiveTools();
-  const estimate = registry.countTokenEstimate();
-
-  console.log(`\n=== 工具统计 ===`);
-  console.log(`  全部工具: ${allCount} 个`);
-  console.log(`  活跃工具: ${activeTools.length} 个（非延迟）`);
-  console.log(`  延迟工具: ${allCount - activeTools.length} 个`);
-  console.log(`  Token 估算: ~${estimate.active} (活跃) + ~${estimate.deferred} (延迟)`);
-
-  const deferredSummary = registry.getDeferredToolSummary();
+  console.log(`活跃工具: ${activeTools.length} 个`);
 
   // const messages: ModelMessage[] = [];
   const rl = createInterface({ input: process.stdin, output: process.stdout });
-
-  const SYSTEM = `你是 Super Agent，一个有工具调用能力的 AI 助手。
-你有内置工具和 MCP 工具可用。
-如果你需要的工具不在当前列表中，使用 tool_search 工具搜索可用工具。
-回答要简洁直接。${deferredSummary}`;
 
   function ask() {
     rl.question('\nYou: ', async (input) => {

@@ -9,6 +9,7 @@ import { createMockModel } from './mock-model';
 import { RemoteMCPClient, MockMCPClient } from './tools/mcp-client.js';
 import { SessionStore } from './session/store';
 import { coreRules, deferredTools, PromptBuilder, sessionContext, toolGuide, type PromptContext } from './context/prompt-builder';
+import { estimateTokens, microcompact, summarize } from './context/compressor';
 
 // 显示加载 .env.local
 dotenv.config({ path: ['.env.local', '.env'] });
@@ -108,8 +109,7 @@ async function connectMCP() {
 async function main() {
   await connectMCP();
 
-  const simCount = registerSimulatedTools();
-  console.log(`  已注册 ${simCount} 个模拟 MCP 工具（Notion/Browser/Supabase）`);
+  registerSimulatedTools();
 
   // Session 持久化
   const isContinue = process.argv.includes('--continue');
@@ -123,6 +123,35 @@ async function main() {
   } else {
     console.log(`\n[Session] 新会话 "${sessionId}"`);
   }
+
+  let summary = '';
+
+  // ── 压缩演示 ──
+  const beforeTokens = estimateTokens(messages);
+  console.log(`\n[压缩前] ${messages.length} 条消息, ~${beforeTokens} tokens`);
+
+  // Layer 1: Microcompact
+  const mc = microcompact(messages);
+  messages = mc.messages;
+  const afterMCTokens = estimateTokens(messages);
+  console.log(`[Layer 1: Microcompact] 清理了 ${mc.cleared} 个工具结果, ~${afterMCTokens} tokens`);
+
+  // Layer 2: LLM Summarization
+  const compResult = await summarize(model, messages, summary);
+  messages = compResult.messages;
+  summary = compResult.summary;
+  const afterSumTokens = estimateTokens(messages);
+  if (compResult.compressedCount > 0) {
+    console.log(`[Layer 2: Summarization] 压缩了 ${compResult.compressedCount} 条消息, ~${afterSumTokens} tokens`);
+    console.log(`[摘要预览] ${summary.slice(0, 150)}...`);
+  } else {
+    console.log(`[Layer 2: Summarization] 未触发（消息量不够）`);
+  }
+
+  console.log(`[压缩后] ${messages.length} 条消息, ~${afterSumTokens} tokens (节省 ${beforeTokens - afterSumTokens} tokens)\n`);
+
+  // Clear injected history for chat — compression demo is done
+  messages = [];
 
   const builder = new PromptBuilder()
     .pipe('coreRules', coreRules())
@@ -169,6 +198,22 @@ async function main() {
       // 持久化本轮新增的消息（agent loop 会往 messages 里 push assistant/tool 消息）
       const newMessages = messages.slice(beforeLen);
       store.appendAll(newMessages);
+
+      // Check if compaction needed after each turn
+      const currentTokens = estimateTokens(messages);
+      if (currentTokens > 4000) {
+        console.log(`\n  [压缩检查] ~${currentTokens} tokens, 触发压缩...`);
+        const mc2 = microcompact(messages);
+        messages = mc2.messages;
+        if (mc2.cleared > 0) console.log(`  [Microcompact] 清理了 ${mc2.cleared} 个工具结果`);
+
+        const comp2 = await summarize(model, messages, summary);
+        if (comp2.compressedCount > 0) {
+          messages = comp2.messages;
+          summary = comp2.summary;
+          console.log(`  [Summarization] 压缩了 ${comp2.compressedCount} 条消息, ~${estimateTokens(messages)} tokens`);
+        }
+      }
 
       ask();
     });

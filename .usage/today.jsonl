@@ -1,0 +1,4 @@
+{"ts":1792844654001,"model":"deepseek-v4-flash-0731","cost":0.002665,"inputTokens":1965,"outputTokens":140,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1792844655306,"model":"deepseek-v4-flash-0731","cost":0.002233,"inputTokens":2108,"outputTokens":25,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1792844701261,"model":"deepseek-v4-flash-0731","cost":0.003052,"inputTokens":2197,"outputTokens":171,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1792844702755,"model":"deepseek-v4-flash-0731","cost":0.002483,"inputTokens":2363,"outputTokens":24,"cacheReadTokens":0,"cacheWriteTokens":0}

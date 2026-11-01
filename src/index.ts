@@ -20,7 +20,7 @@ import { debugCommands } from './commands/debug';
 import { contextCommands } from './commands/context';
 import { memoryCommands } from './commands/memory';
 import { createDashScopeEmbedder, createMockEmbedder, embed } from './rag/embedder';
-import { VectorStore } from './rag/store';
+import { SqliteVectorStore } from './rag/sqlite-store.js';
 import { createRagTools } from './tools/rag-tools';
 import { chunkDocument } from './rag/chunker';
 import { memoryContext, ragContext } from './context/prompt-pipes';
@@ -45,7 +45,7 @@ memoryStore.init();
 registry.register(createMemoryTool(memoryStore));
 
 // ── RAG ───────────────────────────────
-const vectorStore = new VectorStore();
+const vectorStore = new SqliteVectorStore('knowledge.db');
 const embedFn = process.env.DASHSCOPE_API_KEY
   ? createDashScopeEmbedder(process.env.DASHSCOPE_API_KEY)
   : createMockEmbedder();
@@ -134,7 +134,11 @@ async function main() {
   console.log('');
 
   if (fs.existsSync('docs')) {
-    const files = fs.readdirSync('docs').filter(f => f.endsWith('.md'));
+    const existingSources = new Set(vectorStore.sources());
+    const files = fs.readdirSync('docs')
+      .filter(f => f.endsWith('.md'))
+      .filter(f => !existingSources.has(`docs/${f}`)); // 过滤已导入文档
+
     if (files.length > 0) {
       console.log(`  发现 ${files.length} 个文档，自动导入知识库...`);
       for (const f of files) {

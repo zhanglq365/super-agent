@@ -19,3 +19,17 @@
 {"ts":1793433514395,"model":"qwen3.8-max","cost":0.008766,"inputTokens":6061,"outputTokens":541,"cacheReadTokens":0,"cacheWriteTokens":0}
 {"ts":1793434482270,"model":"qwen3.8-max","cost":0.003068,"inputTokens":2328,"outputTokens":148,"cacheReadTokens":0,"cacheWriteTokens":0}
 {"ts":1793434493089,"model":"qwen3.8-max","cost":0.005179,"inputTokens":3889,"outputTokens":258,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520570507,"model":"qwen3.8-2.4t-a95b","cost":0.003045,"inputTokens":2290,"outputTokens":151,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520575277,"model":"qwen3.8-2.4t-a95b","cost":0.003286,"inputTokens":2496,"outputTokens":158,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520578097,"model":"qwen3.8-2.4t-a95b","cost":0.003321,"inputTokens":2876,"outputTokens":89,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520588244,"model":"qwen3.8-2.4t-a95b","cost":0.005277,"inputTokens":3257,"outputTokens":404,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520598966,"model":"qwen3.8-2.4t-a95b","cost":0.005234,"inputTokens":3429,"outputTokens":361,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520611359,"model":"qwen3.8-2.4t-a95b","cost":0.006632,"inputTokens":4182,"outputTokens":490,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520627481,"model":"qwen3.8-2.4t-a95b","cost":0.008136,"inputTokens":5056,"outputTokens":616,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520642091,"model":"qwen3.8-2.4t-a95b","cost":0.00876,"inputTokens":5975,"outputTokens":557,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520646655,"model":"qwen3.8-2.4t-a95b","cost":0.006881,"inputTokens":6386,"outputTokens":99,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520819911,"model":"qwen3.8-2.4t-a95b","cost":0.002816,"inputTokens":2326,"outputTokens":98,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520823015,"model":"qwen3.8-2.4t-a95b","cost":0.002892,"inputTokens":2407,"outputTokens":97,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520824899,"model":"qwen3.8-2.4t-a95b","cost":0.00272,"inputTokens":2500,"outputTokens":44,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520834299,"model":"qwen3.8-2.4t-a95b","cost":0.004409,"inputTokens":2799,"outputTokens":322,"cacheReadTokens":0,"cacheWriteTokens":0}
+{"ts":1793520853298,"model":"qwen3.8-2.4t-a95b","cost":0.007377,"inputTokens":3872,"outputTokens":701,"cacheReadTokens":0,"cacheWriteTokens":0}

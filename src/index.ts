@@ -1,19 +1,17 @@
 import dotenv from 'dotenv';
-import { stepCountIs, streamText, type ModelMessage } from 'ai'
+import fs from 'node:fs';
+import { type ModelMessage } from 'ai'
 import { createOpenAI } from '@ai-sdk/openai';
 import { createInterface } from 'node:readline'; // 用于读取用户输入
-import { ToolRegistry, type ToolDefinition } from './tools/registry';
+import { ToolRegistry } from './tools/registry';
 import { allTools } from './tools';
 import { agentLoop } from './agent/loop';
-import { createMockModel, setCacheEnabled } from './mock-model';
-import { RemoteMCPClient, MockMCPClient } from './tools/mcp-client.js';
+import { createMockModel } from './mock-model';
+import { MockMCPClient } from './tools/mcp-client.js';
 import { SessionStore } from './session/store';
 import { coreRules, deferredTools, PromptBuilder, sessionContext, toolGuide, type PromptContext } from './context/prompt-builder';
-import { estimateTokens, microcompact, summarize } from './context/compressor';
-import { textToolResultOutput } from './context/tool-result-output';
-import { applyDefense, estimateMessageTokens, TokenTracker } from './context/defense';
+import { estimateMessageTokens } from './context/defense';
 import { UsageTracker } from './usage/tracker';
-import { buildContextSnapshot, renderContextView, renderUsageView } from './context/view';
 import { createToolSearchTool } from './tools/tool-search';
 import { createDispatcher, type CommandContext } from './commands';
 import { MemoryStore } from './memory/store';
@@ -21,6 +19,11 @@ import { createMemoryTool } from './tools/memory-tools';
 import { debugCommands } from './commands/debug';
 import { contextCommands } from './commands/context';
 import { memoryCommands } from './commands/memory';
+import { createDashScopeEmbedder, createMockEmbedder, embed } from './rag/embedder';
+import { VectorStore } from './rag/store';
+import { createRagTools } from './tools/rag-tools';
+import { chunkDocument } from './rag/chunker';
+import { memoryContext, ragContext } from './context/prompt-pipes';
 
 // 显示加载 .env.local
 dotenv.config({ path: ['.env.local', '.env'] });
@@ -40,6 +43,13 @@ registry.register(createToolSearchTool(registry));
 const memoryStore = new MemoryStore('.');
 memoryStore.init();
 registry.register(createMemoryTool(memoryStore));
+
+// ── RAG ───────────────────────────────
+const vectorStore = new VectorStore();
+const embedFn = process.env.DASHSCOPE_API_KEY
+  ? createDashScopeEmbedder(process.env.DASHSCOPE_API_KEY)
+  : createMockEmbedder();
+registry.register(...createRagTools(vectorStore, embedFn));
 
 async function connectMCP() {
   const mockClient = new MockMCPClient();
@@ -66,7 +76,8 @@ async function main() {
     .pipe('coreRules', coreRules())
     .pipe('toolGuide', toolGuide())
     .pipe('deferredTools', deferredTools())
-    .pipe('memoryContext', () => memoryStore.buildPromptSection())
+    .pipe('memoryContext', memoryContext(memoryStore))
+    .pipe('ragContext', ragContext(vectorStore))
     .pipe('sessionContext', sessionContext());
 
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -88,7 +99,7 @@ async function main() {
       const ctx: CommandContext = {
         messages, timestamps, registry, builder, tracker,
         sessionStore: store, model, makePromptCtx, ask,
-        memoryStore,
+        memoryStore, vectorStore,
       };
       const handled = dispatch(trimmed, ctx);
       if (handled === 'async') return;
@@ -113,16 +124,30 @@ async function main() {
     });
   }
 
-  console.log('Super Agent v0.11 — Memory System (type "exit" to quit)');
+  console.log('Super Agent v0.12 — RAG (type "exit" to quit)');
   console.log('快捷命令：');
-  console.log('  /memory         — 查看所有记忆');
-  console.log('  /memory search  — 搜索记忆');
-  console.log('  /context        — 终端里看 context 占用矩阵');
-  console.log('  /usage          — 累计 token 用量和成本');
-  console.log('  status          — 当前消息数、token 和记忆数');
+  console.log('  ingest <path>   — 导入文档到知识��');
+  console.log('  /rag            — 查看知识库状态');
+  console.log('  /memory         — 查看记忆');
+  console.log('  /context        — context 占用矩阵');
+  console.log('  status          — 当前状态');
   console.log('');
-  console.log(`  已加载 ${memoryStore.list().length} 条历史记忆`);
-  console.log('');
+
+  if (fs.existsSync('docs')) {
+    const files = fs.readdirSync('docs').filter(f => f.endsWith('.md'));
+    if (files.length > 0) {
+      console.log(`  发现 ${files.length} 个文档，自动导入知识库...`);
+      for (const f of files) {
+        const path = `docs/${f}`;
+        const text = fs.readFileSync(path, 'utf-8');
+        const chunks = chunkDocument(path, text);
+        const embeddings = await embed(embedFn, chunks.map(c => c.text));
+        vectorStore.addBatch(chunks.map((c, i) => ({ chunk: c, embedding: embeddings[i] })));
+        console.log(`    ${f} → ${chunks.length} 个片段`);
+      }
+      console.log(`  知识库就绪，共 ${vectorStore.size()} 个片段\n`);
+    }
+  }
 
   ask();
 }

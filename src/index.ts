@@ -24,6 +24,9 @@ import { SqliteVectorStore } from './rag/sqlite-store.js';
 import { createRagTools } from './tools/rag-tools';
 import { chunkDocument } from './rag/chunker';
 import { memoryContext, ragContext } from './context/prompt-pipes';
+import { VectorStore } from './rag/store';
+import { ragCommands } from './commands/rag';
+import { dreamCommands } from './commands/dream';
 
 // 显示加载 .env.local
 dotenv.config({ path: ['.env.local', '.env'] });
@@ -62,6 +65,8 @@ const dispatch = createDispatcher([
   ...debugCommands,
   ...contextCommands,
   ...memoryCommands,
+  ...ragCommands,
+  ...dreamCommands,
 ]);
 
 async function main() {
@@ -124,11 +129,13 @@ async function main() {
     });
   }
 
-  console.log('Super Agent v0.12 — RAG (type "exit" to quit)');
+  console.log('Super Agent v0.13 — Memory Maintenance (type "exit" to quit)');
   console.log('快捷命令：');
-  console.log('  ingest <path>   — 导入文档到知识��');
+  console.log('  ingest <path>   — 导入文档到知识库');
   console.log('  /rag            — 查看知识库状态');
-  console.log('  /memory         — 查看记忆');
+  console.log('  /memory         — 查看记忆（带 ⚠️ 标记）');
+  console.log('  /lint           — 扫描记忆库');
+  console.log('  /dream          — 记忆整理（lint → 清理 → 合并 → 报告）');
   console.log('  /context        — context 占用矩阵');
   console.log('  status          — 当前状态');
   console.log('');
